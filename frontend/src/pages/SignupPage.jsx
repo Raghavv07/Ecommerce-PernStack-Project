@@ -1,17 +1,19 @@
 import { useState } from "react";
 import { Link, useNavigate, Navigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
-import { StoreIcon, UserPlusIcon, EyeIcon, EyeOffIcon, XIcon } from "lucide-react";
+import { StoreIcon, UserPlusIcon, EyeIcon, EyeOffIcon, XIcon, SparklesIcon } from "lucide-react";
 
 export default function SignupPage() {
-  const { signup, isSignedIn } = useAuth();
+  const { signup, guestLogin, isSignedIn } = useAuth();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
+  const [guestName, setGuestName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [guestLoading, setGuestLoading] = useState(false);
   const [error, setError] = useState(null);
 
   if (isSignedIn) {
@@ -30,6 +32,22 @@ export default function SignupPage() {
       setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleGuestSubmit(e) {
+    e.preventDefault();
+    if (!guestName.trim()) return;
+    setError(null);
+    setGuestLoading(true);
+
+    try {
+      await guestLogin(guestName.trim());
+      navigate("/", { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Guest login failed");
+    } finally {
+      setGuestLoading(false);
     }
   }
 
@@ -130,7 +148,36 @@ export default function SignupPage() {
             </button>
           </form>
 
-          <p className="mt-6 text-center text-xs text-base-content/60">
+          <div className="divider my-4 text-xs text-base-content/40">OR</div>
+
+          {/* Quick Guest User Entry */}
+          <div className="rounded-xl border border-base-300 bg-base-200/50 p-4 text-left">
+            <div className="flex items-center gap-1.5 mb-2">
+              <SparklesIcon className="size-4 text-primary" />
+              <span className="text-xs font-semibold text-base-content">
+                Don't want to register? Continue as Guest
+              </span>
+            </div>
+            <form onSubmit={handleGuestSubmit} className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Enter your name"
+                value={guestName}
+                onChange={(e) => setGuestName(e.target.value)}
+                className="input input-bordered input-sm flex-1 text-xs"
+              />
+              <button
+                type="submit"
+                disabled={guestLoading || !guestName.trim()}
+                className="btn btn-secondary btn-sm text-xs gap-1 shadow-sm"
+              >
+                {guestLoading ? <span className="loading loading-spinner loading-xs" /> : null}
+                Guest Entry ⚡
+              </button>
+            </form>
+          </div>
+
+          <p className="mt-4 text-center text-xs text-base-content/60">
             Already have an account?{" "}
             <Link to="/login" className="link link-primary font-semibold">
               Sign in
