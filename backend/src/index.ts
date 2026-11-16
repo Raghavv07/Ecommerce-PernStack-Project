@@ -5,49 +5,35 @@ import cors from "cors";
 import fs from "node:fs";
 import path from "node:path";
 
-import * as Sentry from "@sentry/node";
-
-import { clerkMiddleware } from "@clerk/express";
-import { clerkWebhookHandler } from "./webhooks/clerk";
 import { getEnv } from "./lib/env";
 import keepAliveCron from "./lib/cron";
 
+import { authMiddleware } from "./middleware/auth";
+
+import authRouter from "./routes/authRouter";
 import productRouter from "./routes/productRouter";
 import meRouter from "./routes/meRouter";
 import streamRouter from "./routes/streamRouter";
-import chekoutRouter from "./routes/chekoutRouter";
+import checkoutRouter from "./routes/checkoutRouter";
 import adminRouter from "./routes/adminRouter";
 import orderRouter from "./routes/orderRouter";
-
-import { polarWebhookHandler } from "./webhooks/polar";
-import { sentryClerkUserMiddleware } from "./middleware/sentryClerkUser";
 
 const env = getEnv();
 const app = express();
 
-const rawJson = express.raw({ type: "application/json", limit: "1mb" });
-
-// it's important that you don't parse the webhook event data, it should be in the raw format
-app.post("/webhooks/clerk", rawJson, (req, res) => {
-  void clerkWebhookHandler(req, res);
-});
-app.post("/webhooks/polar", rawJson, (req, res) => {
-  void polarWebhookHandler(req, res);
-});
-
 app.use(express.json());
 app.use(cors());
-app.use(clerkMiddleware());
-app.use(sentryClerkUserMiddleware);
+app.use(authMiddleware);
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
+app.use("/api/auth", authRouter);
 app.use("/api/me", meRouter);
 app.use("/api/products", productRouter);
 app.use("/api/stream", streamRouter);
-app.use("/api/checkout", chekoutRouter);
+app.use("/api/checkout", checkoutRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/orders", orderRouter);
 
@@ -61,7 +47,7 @@ if (fs.existsSync(publicDir)) {
       return;
     }
 
-    if (req.path.startsWith("/api") || req.path.startsWith("/webhooks")) {
+    if (req.path.startsWith("/api")) {
       next();
       return;
     }
@@ -70,22 +56,16 @@ if (fs.existsSync(publicDir)) {
   });
 }
 
-// sentry will be attached to the response object
-Sentry.setupExpressErrorHandler(app);
-
+// Error handling middleware
 app.use(
-  (_err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    const sentryId = (res as express.Response & { sentry?: string }).sentry;
-
-    res.status(500).json({
-      error: "Internal server error",
-      ...(sentryId !== undefined && { sentryId }),
-    });
+  (err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error("Server error:", err);
+    res.status(500).json({ error: "Internal server error" });
   },
 );
 
-app.listen(env.PORT, () => {
-  console.log("Listening on port:", env.PORT);
+app.listen(env.PORT, "0.0.0.0", () => {
+  console.log(`Listening on port: ${env.PORT}`);
   if (env.NODE_ENV === "production") {
     keepAliveCron.start();
   }

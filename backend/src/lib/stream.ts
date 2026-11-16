@@ -17,6 +17,6 @@ export function getStreamChatServer(env: Env) {
   return StreamChat.getInstance(env.STREAM_API_KEY, env.STREAM_API_SECRET);
 }
 
-export function streamUserId(clerkUserId: string) {
-  return `clerk_${clerkUserId}`;
+export function streamUserId(userId: string) {
+  return `user_${userId}`;
 }

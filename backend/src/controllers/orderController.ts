@@ -1,4 +1,4 @@
-import { getAuth } from "@clerk/express";
+import { getAuth } from "../middleware/auth.js";
 import type { NextFunction, Response, Request } from "express";
 import { getLocalUser } from "../lib/users";
 import { isStaff } from "../lib/roles";
@@ -10,6 +10,11 @@ import { getEnv } from "../lib/env";
 
 const env = getEnv();
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isValidUuid(id: string): boolean {
+  return typeof id === "string" && UUID_REGEX.test(id);
+}
+
 export async function listOrders(req: Request, res: Response, next: NextFunction) {
   try {
     const { userId, isAuthenticated } = getAuth(req);
@@ -20,7 +25,7 @@ export async function listOrders(req: Request, res: Response, next: NextFunction
 
     const localUser = await getLocalUser(userId);
     if (!localUser) {
-      res.status(503).json({ error: "Account not synced yet" });
+      res.status(404).json({ error: "User not found" });
       return;
     }
 
@@ -82,14 +87,20 @@ export async function getOrder(req: Request, res: Response, next: NextFunction) 
 
     const localUser = await getLocalUser(userId);
     if (!localUser) {
-      res.status(503).json({ error: "Account not synced yet" });
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    const orderId = req.params.id as string;
+    if (!isValidUuid(orderId)) {
+      res.status(404).json({ error: "Not found" });
       return;
     }
 
     const [order] = await db
       .select()
       .from(orders)
-      .where(eq(orders.id, req.params.id as string))
+      .where(eq(orders.id, orderId))
       .limit(1);
 
     if (!order) {
@@ -132,14 +143,20 @@ export async function createStreamChannel(req: Request, res: Response, next: Nex
 
     const localUser = await getLocalUser(userId);
     if (!localUser) {
-      res.status(503).json({ error: "Account not synced yet" });
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    const orderId = req.params.id as string;
+    if (!isValidUuid(orderId)) {
+      res.status(404).json({ error: "Not found" });
       return;
     }
 
     const [order] = await db
       .select()
       .from(orders)
-      .where(eq(orders.id, req.params.id as string))
+      .where(eq(orders.id, orderId))
       .limit(1);
 
     if (!order) {
@@ -193,7 +210,7 @@ export async function createVideoInvite(req: Request, res: Response, next: NextF
 
     const localUser = await getLocalUser(userId);
     if (!localUser) {
-      res.status(503).json({ error: "Account not synced yet" });
+      res.status(404).json({ error: "User not found" });
       return;
     }
 
@@ -202,10 +219,16 @@ export async function createVideoInvite(req: Request, res: Response, next: NextF
       return;
     }
 
+    const orderId = req.params.id as string;
+    if (!isValidUuid(orderId)) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+
     const [order] = await db
       .select()
       .from(orders)
-      .where(eq(orders.id, req.params.id as string))
+      .where(eq(orders.id, orderId))
       .limit(1);
 
     if (!order || order.status !== "paid") {
@@ -215,7 +238,7 @@ export async function createVideoInvite(req: Request, res: Response, next: NextF
 
     const [owner] = await db.select().from(users).where(eq(users.id, order.userId)).limit(1);
 
-    const customerSid = streamUserId(owner.clerkUserId);
+    const customerSid = streamUserId(owner.id);
     await server.upsertUser({
       id: customerSid,
       name: owner.displayName ?? owner.email ?? "Customer",

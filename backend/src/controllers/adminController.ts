@@ -1,4 +1,4 @@
-import { getAuth } from "@clerk/express";
+import { getAuth } from "../middleware/auth.js";
 import type { Request, Response, NextFunction } from "express";
 import { getLocalUser } from "../lib/users";
 import { isAdmin } from "../lib/roles";
@@ -11,6 +11,11 @@ import { z } from "zod";
 import { deleteImageKitAsset } from "../lib/imagekit";
 
 const env = getEnv();
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isValidUuid(id: string): boolean {
+  return typeof id === "string" && UUID_REGEX.test(id);
+}
 
 const productCreate = z.object({
   slug: z.string().min(1),
@@ -54,7 +59,7 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
     }
     const user = await getLocalUser(userId);
 
-    if (!isAdmin(user.role)) {
+    if (!user || !isAdmin(user.role)) {
       res.status(403).json({ error: "Admin only" });
       return;
     }
@@ -114,6 +119,12 @@ export async function createAdminProduct(req: Request, res: Response, next: Next
 
 export async function updateAdminProduct(req: Request, res: Response, next: NextFunction) {
   try {
+    const id = req.params.id as string;
+    if (!isValidUuid(id)) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+
     const parsed = productPatch.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: "Invalid body", details: parsed.error.flatten() });
@@ -130,7 +141,7 @@ export async function updateAdminProduct(req: Request, res: Response, next: Next
     const [row] = await db
       .update(products)
       .set(data)
-      .where(eq(products.id, req.params.id as string))
+      .where(eq(products.id, id))
       .returning();
 
     if (!row) {
@@ -147,6 +158,11 @@ export async function updateAdminProduct(req: Request, res: Response, next: Next
 export async function deleteAdminProduct(req: Request, res: Response, next: NextFunction) {
   try {
     const id = req.params.id as string;
+    if (!isValidUuid(id)) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+
     const [existing] = await db.select().from(products).where(eq(products.id, id)).limit(1);
     if (!existing) {
       res.status(404).json({ error: "Not found" });

@@ -1,6 +1,6 @@
 import { useParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "@clerk/react";
+import { useAuth } from "../context/AuthContext";
 import { apiFetch } from "../lib/api.js";
 
 export function useOrderDetailPage() {

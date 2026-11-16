@@ -1,9 +1,10 @@
 import "dotenv/config";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
-import { products } from "../src/db/schema.js";
+import { products, users } from "../src/db/schema.js";
+import { hashPassword } from "../src/lib/crypto.js";
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL || process.env.DATABASE_URL_UNPOOLED });
 const db = drizzle(pool);
 
 const CATALOG = [
@@ -201,6 +202,49 @@ async function main() {
       });
   }
   console.log(`Seed complete (${CATALOG.length} products upserted).`);
+
+  const DEMO_USERS = [
+    {
+      email: "admin@ecommerce.com",
+      password: "password123",
+      displayName: "Admin User",
+      role: "admin" as const,
+    },
+    {
+      email: "support@ecommerce.com",
+      password: "password123",
+      displayName: "Support Agent",
+      role: "support" as const,
+    },
+    {
+      email: "customer@ecommerce.com",
+      password: "password123",
+      displayName: "Demo Customer",
+      role: "customer" as const,
+    },
+  ];
+
+  for (const u of DEMO_USERS) {
+    const passwordHash = hashPassword(u.password);
+    await db
+      .insert(users)
+      .values({
+        email: u.email,
+        passwordHash,
+        displayName: u.displayName,
+        role: u.role,
+      })
+      .onConflictDoUpdate({
+        target: users.email,
+        set: {
+          passwordHash,
+          displayName: u.displayName,
+          role: u.role,
+        },
+      });
+  }
+  console.log(`Demo users seeded: admin@ecommerce.com, support@ecommerce.com, customer@ecommerce.com (password: password123)`);
+
   await pool.end();
 }
 

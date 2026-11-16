@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { getAuth, clerkClient } from "@clerk/express";
+import { getAuth } from "../middleware/auth.js";
 import { getLocalUser } from "../lib/users.js";
 import { getStreamChatServer, streamChatDisplayName, streamUserId } from "../lib/stream.js";
 import { getEnv } from "../lib/env.js";
@@ -16,26 +16,21 @@ export async function createStreamToken(req: Request, res: Response, next: NextF
 
     const localUser = await getLocalUser(userId);
     if (!localUser) {
-      res.status(503).json({ error: "Account not synced yet" });
+      res.status(404).json({ error: "User not found" });
       return;
     }
 
     const server = getStreamChatServer(env);
 
-    const clerkUser = await clerkClient.users.getUser(userId);
-
-    const combined = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") || null;
-
     const name = streamChatDisplayName(
       localUser.role,
-      localUser.displayName ?? combined ?? clerkUser.username,
+      localUser.displayName,
       localUser.email,
     );
 
-    const image = clerkUser.imageUrl || undefined;
-    const sid = streamUserId(userId);
+    const sid = streamUserId(localUser.id);
 
-    await server.upsertUser({ id: sid, name, image });
+    await server.upsertUser({ id: sid, name });
 
     const token = server.createToken(sid);
 

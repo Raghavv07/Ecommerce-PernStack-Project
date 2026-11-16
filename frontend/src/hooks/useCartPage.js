@@ -1,5 +1,4 @@
-import { useAuth } from "@clerk/react";
-
+import { useAuth } from "../context/AuthContext";
 import { useCart } from "../store/cart";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "../lib/api";
@@ -8,6 +7,7 @@ import { useState } from "react";
 export default function useCartPage() {
   const { getToken } = useAuth();
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
   const items = useCart((s) => s.items);
   const setQty = useCart((s) => s.setQty);
@@ -35,25 +35,34 @@ export default function useCartPage() {
     return sum + p.priceCents * line.quantity;
   }, 0);
 
-  async function checkout() {
+  function openPaymentModal() {
+    setIsPaymentModalOpen(true);
+  }
+
+  function closePaymentModal() {
+    setIsPaymentModalOpen(false);
+  }
+
+  async function processOrder(paymentMethod = "card", paymentDetails = {}) {
     setCheckoutLoading(true);
 
-    const body = {
-      items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
-    };
+    try {
+      const body = {
+        items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+        paymentMethod,
+        paymentDetails,
+      };
 
-    const res = await apiFetch("/api/checkout", {
-      getToken,
-      method: "POST",
-      body,
-    });
+      const res = await apiFetch("/api/checkout", {
+        getToken,
+        method: "POST",
+        body,
+      });
 
-    if (res?.checkoutUrl) {
-      window.location.href = res.checkoutUrl;
-      return;
+      return res;
+    } finally {
+      setCheckoutLoading(false);
     }
-
-    setCheckoutLoading(false);
   }
 
   return {
@@ -64,7 +73,10 @@ export default function useCartPage() {
     productsError,
     lines,
     subtotal,
-    checkout,
+    openPaymentModal,
+    closePaymentModal,
+    isPaymentModalOpen,
+    processOrder,
     checkoutLoading,
   };
 }

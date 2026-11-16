@@ -13,11 +13,11 @@ import { PageError } from "../components/PageError";
 import { IK_PRESETS, imageKitOptimizedUrl } from "../lib/imagekitUrl";
 import { Link } from "react-router";
 import { formatPrice } from "../utils/format";
-import { Show, SignInButton } from "@clerk/react";
+import { Show, SignInButton } from "../context/AuthContext";
+import { PaymentModal } from "../components/PaymentModal";
 
 function CartPage() {
   const {
-    checkout,
     checkoutLoading,
     items,
     lines,
@@ -26,6 +26,10 @@ function CartPage() {
     removeItem,
     setQty,
     subtotal,
+    openPaymentModal,
+    closePaymentModal,
+    isPaymentModalOpen,
+    processOrder,
   } = useCartPage();
 
   return (
@@ -135,7 +139,7 @@ function CartPage() {
             <Show when="signed-in">
               <button
                 type="button"
-                onClick={checkout}
+                onClick={openPaymentModal}
                 disabled={checkoutLoading}
                 aria-busy={checkoutLoading}
                 className="btn btn-primary mt-6 w-full gap-2"
@@ -169,6 +173,15 @@ function CartPage() {
           </aside>
         </div>
       )}
+
+      {/* Payment Gateway Modal */}
+      <PaymentModal
+        isOpen={isPaymentModalOpen}
+        onClose={closePaymentModal}
+        subtotal={subtotal}
+        currency={lines[0]?.product?.currency ?? "usd"}
+        onProcessOrder={processOrder}
+      />
     </div>
   );
 }

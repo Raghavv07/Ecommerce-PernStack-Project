@@ -1,8 +1,31 @@
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { users } from "../db/schema.js";
 
-export async function getLocalUser(clerkUserId: string) {
-  const [row] = await db.select().from(users).where(eq(users.clerkUserId, clerkUserId)).limit(1);
-  return row;
+export async function getUserById(id: string) {
+  const [row] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return row ?? null;
+}
+
+export async function getUserByEmail(email: string) {
+  const [row] = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, email.toLowerCase().trim()))
+    .limit(1);
+  return row ?? null;
+}
+
+export async function getLocalUser(userIdOrId: string) {
+  if (!userIdOrId) return null;
+  const [row] = await db
+    .select()
+    .from(users)
+    .where(
+      users.clerkUserId
+        ? or(eq(users.id, userIdOrId), eq(users.clerkUserId, userIdOrId))
+        : eq(users.id, userIdOrId),
+    )
+    .limit(1);
+  return row ?? null;
 }

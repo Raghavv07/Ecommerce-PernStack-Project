@@ -1,5 +1,3 @@
-import * as Sentry from "@sentry/react";
-
 const raw = import.meta.env.VITE_API_URL;
 const base = typeof raw === "string" ? raw.replace(/\/+$/, "") : ""; // remove trailing slashes
 
@@ -8,57 +6,33 @@ export async function apiFetch(path, opts = {}) {
   const { getToken, method = "GET", body } = opts;
   const headers = { "Content-Type": "application/json" };
 
+  let token = null;
   if (getToken) {
-    const token = await getToken();
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
+    token = await getToken();
+  } else if (typeof window !== "undefined") {
+    token = localStorage.getItem("ecommerce_jwt_token");
   }
 
-  let res;
-  try {
-    res = await fetch(`${base}${path}`, {
-      method,
-      headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
-  } catch (e) {
-    Sentry.addBreadcrumb({
-      category: "api",
-      message: `${method} ${path}`,
-      level: "error",
-      data: { network: true },
-    });
-
-    Sentry.captureException(e, {
-      tags: { "api.fetch": "network" },
-      extra: { path, method },
-    });
-
-    throw e;
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
   }
 
-  const data = await res.json();
-
-  Sentry.addBreadcrumb({
-    category: "api",
-    message: `${method} ${path}`,
-    level: res.ok ? "info" : "warning",
-    data: { status: res.status },
+  const res = await fetch(`${base}${path}`, {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
+  let data = null;
+  try {
+    data = await res.json();
+  } catch {
+    data = null;
+  }
+
   if (!res.ok) {
-    const msg = typeof data?.error === "string" ? data.error : res.statusText;
-    const err = new Error(typeof msg === "string" ? msg : "Request failed");
-
-    if (res.status >= 500) {
-      Sentry.captureException(err, {
-        tags: { "api.fetch": "http", "http.status": String(res.status) },
-        extra: { path, method, status: res.status },
-      });
-    }
-
-    throw err;
+    const msg = typeof data?.error === "string" ? data.error : res.statusText || `Request failed with status ${res.status}`;
+    throw new Error(typeof msg === "string" ? msg : "Request failed");
   }
 
   return data;
