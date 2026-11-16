@@ -1,17 +1,19 @@
 import { useState } from "react";
 import { Link, useNavigate, useLocation, Navigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
-import { StoreIcon, LogInIcon, EyeIcon, EyeOffIcon, XIcon } from "lucide-react";
+import { StoreIcon, LogInIcon, EyeIcon, EyeOffIcon, XIcon, SparklesIcon } from "lucide-react";
 
 export default function LoginPage() {
-  const { login, isSignedIn } = useAuth();
+  const { login, guestLogin, isSignedIn } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [guestName, setGuestName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [guestLoading, setGuestLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const from = location.state?.from?.pathname || "/";
@@ -27,12 +29,29 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
-      const from = location.state?.from?.pathname || "/";
-      navigate(from, { replace: true });
+      const destination = location.state?.from?.pathname || "/";
+      navigate(destination, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid email or password");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleGuestSubmit(e) {
+    e.preventDefault();
+    if (!guestName.trim()) return;
+    setError(null);
+    setGuestLoading(true);
+
+    try {
+      await guestLogin(guestName.trim());
+      const destination = location.state?.from?.pathname || "/";
+      navigate(destination, { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Guest login failed");
+    } finally {
+      setGuestLoading(false);
     }
   }
 
@@ -117,7 +136,36 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p className="mt-6 text-center text-xs text-base-content/60">
+          <div className="divider my-4 text-xs text-base-content/40">OR</div>
+
+          {/* Quick Guest User Entry */}
+          <div className="rounded-xl border border-base-300 bg-base-200/50 p-4 text-left">
+            <div className="flex items-center gap-1.5 mb-2">
+              <SparklesIcon className="size-4 text-primary" />
+              <span className="text-xs font-semibold text-base-content">
+                No password? Continue as Guest
+              </span>
+            </div>
+            <form onSubmit={handleGuestSubmit} className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Enter your name"
+                value={guestName}
+                onChange={(e) => setGuestName(e.target.value)}
+                className="input input-bordered input-sm flex-1 text-xs"
+              />
+              <button
+                type="submit"
+                disabled={guestLoading || !guestName.trim()}
+                className="btn btn-secondary btn-sm text-xs gap-1 shadow-sm"
+              >
+                {guestLoading ? <span className="loading loading-spinner loading-xs" /> : null}
+                Guest Entry ⚡
+              </button>
+            </form>
+          </div>
+
+          <p className="mt-4 text-center text-xs text-base-content/60">
             Don't have an account?{" "}
             <Link to="/signup" className="link link-primary font-semibold">
               Create an account

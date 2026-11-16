@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { Link } from "react-router";
 import { apiFetch } from "../lib/api";
-import { LogInIcon, LogOutIcon, PackageIcon, SettingsIcon, XIcon, EyeIcon, EyeOffIcon, StoreIcon } from "lucide-react";
+import { LogInIcon, LogOutIcon, PackageIcon, SettingsIcon, XIcon, EyeIcon, EyeOffIcon, StoreIcon, SparklesIcon, UserIcon } from "lucide-react";
 
 const TOKEN_KEY = "ecommerce_jwt_token";
 
@@ -98,6 +98,22 @@ export function AuthProvider({ children }) {
     throw new Error(data?.error || "Registration failed");
   }, []);
 
+  const guestLogin = useCallback(async (name) => {
+    const data = await apiFetch("/api/auth/guest", {
+      method: "POST",
+      body: { name },
+    });
+
+    if (data?.token && data?.user) {
+      localStorage.setItem(TOKEN_KEY, data.token);
+      setToken(data.token);
+      setUser(data.user);
+      setAuthModalOpen(false);
+      return data.user;
+    }
+    throw new Error(data?.error || "Guest login failed");
+  }, []);
+
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
     setToken(null);
@@ -123,6 +139,11 @@ export function AuthProvider({ children }) {
     setAuthModalOpen(true);
   }, []);
 
+  const openGuestModal = useCallback(() => {
+    setAuthModalMode("guest");
+    setAuthModalOpen(true);
+  }, []);
+
   const closeAuthModal = useCallback(() => {
     setAuthModalOpen(false);
   }, []);
@@ -136,9 +157,11 @@ export function AuthProvider({ children }) {
     getToken,
     login,
     signup,
+    guestLogin,
     logout,
     openLoginModal,
     openSignupModal,
+    openGuestModal,
     closeAuthModal,
     authModalOpen,
     authModalMode,
@@ -265,15 +288,15 @@ export function UserButton() {
           onClick={() => setDropdownOpen(false)}
         >
           <li className="menu-title px-4 py-2 border-b border-base-300/60">
-            <div className="font-semibold text-base-content text-sm truncate">
-              {user.displayName || "User"}
+            <div className="font-semibold text-base-content text-sm truncate flex items-center gap-1.5">
+              <span>{user.displayName || "User"}</span>
             </div>
             <div className="text-xs text-base-content/60 truncate font-normal">
-              {user.email}
+              {user.email?.includes("@guest.local") ? "Guest Session" : user.email}
             </div>
             <div className="mt-1">
-              <span className="badge badge-primary badge-xs capitalize">
-                {role}
+              <span className={`badge ${user.email?.includes("@guest.local") ? "badge-warning" : "badge-primary"} badge-xs capitalize`}>
+                {user.email?.includes("@guest.local") ? "Guest User" : role}
               </span>
             </div>
           </li>
@@ -316,11 +339,12 @@ export function UserButton() {
  * Sleek, interactive Auth Modal with tabs for Sign In & Sign Up
  */
 function AuthModal() {
-  const { closeAuthModal, authModalMode, setAuthModalMode, login, signup } = useAuth();
+  const { closeAuthModal, authModalMode, setAuthModalMode, login, signup, guestLogin } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [guestName, setGuestName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -333,12 +357,15 @@ function AuthModal() {
     try {
       if (authModalMode === "login") {
         await login(email, password);
-      } else {
+      } else if (authModalMode === "signup") {
         await signup({ email, password, displayName });
+      } else if (authModalMode === "guest") {
+        await guestLogin(guestName);
       }
       setEmail("");
       setPassword("");
       setDisplayName("");
+      setGuestName("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");
     } finally {
@@ -362,25 +389,31 @@ function AuthModal() {
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
           <div className="flex size-10 items-center justify-center rounded-xl bg-primary/15 text-primary">
-            <StoreIcon className="size-6" />
+            {authModalMode === "guest" ? <SparklesIcon className="size-6" /> : <StoreIcon className="size-6" />}
           </div>
           <div>
             <h3 className="font-bold text-lg text-base-content">
-              {authModalMode === "login" ? "Welcome back" : "Create an account"}
+              {authModalMode === "login"
+                ? "Welcome back"
+                : authModalMode === "signup"
+                ? "Create an account"
+                : "Continue as Guest"}
             </h3>
             <p className="text-xs text-base-content/60">
               {authModalMode === "login"
                 ? "Sign in to access your orders and checkout"
-                : "Join Northwind Ecommerce today"}
+                : authModalMode === "signup"
+                ? "Join Northwind Ecommerce today"
+                : "No password needed — shop instantly"}
             </p>
           </div>
         </div>
 
         {/* Tab switch */}
-        <div className="tabs tabs-boxed mb-5 grid grid-cols-2 bg-base-200 p-1 rounded-xl">
+        <div className="tabs tabs-boxed mb-5 grid grid-cols-3 bg-base-200 p-1 rounded-xl">
           <button
             type="button"
-            className={`tab ${authModalMode === "login" ? "tab-active font-semibold shadow-sm" : ""}`}
+            className={`tab text-xs ${authModalMode === "login" ? "tab-active font-semibold shadow-sm" : ""}`}
             onClick={() => {
               setAuthModalMode("login");
               setError(null);
@@ -390,13 +423,23 @@ function AuthModal() {
           </button>
           <button
             type="button"
-            className={`tab ${authModalMode === "signup" ? "tab-active font-semibold shadow-sm" : ""}`}
+            className={`tab text-xs ${authModalMode === "signup" ? "tab-active font-semibold shadow-sm" : ""}`}
             onClick={() => {
               setAuthModalMode("signup");
               setError(null);
             }}
           >
-            Create Account
+            Sign Up
+          </button>
+          <button
+            type="button"
+            className={`tab text-xs ${authModalMode === "guest" ? "tab-active font-semibold shadow-sm text-primary" : ""}`}
+            onClick={() => {
+              setAuthModalMode("guest");
+              setError(null);
+            }}
+          >
+            ⚡ Guest
           </button>
         </div>
 
@@ -416,84 +459,128 @@ function AuthModal() {
 
         {/* Auth Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
-          {authModalMode === "signup" && (
-            <div>
-              <label className="label py-1 text-xs font-semibold text-base-content/80">
-                Display Name
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. John Doe"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                className="input input-bordered w-full text-sm"
-              />
-            </div>
-          )}
+          {authModalMode === "guest" ? (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-primary/25 bg-primary/5 p-3.5 text-xs text-base-content/80 flex items-start gap-2.5">
+                <SparklesIcon className="size-4 shrink-0 text-primary mt-0.5" />
+                <span>
+                  <strong>Fast & Passwordless:</strong> Enter your name below to immediately browse, add items to cart, checkout, and chat with support.
+                </span>
+              </div>
 
-          <div>
-            <label className="label py-1 text-xs font-semibold text-base-content/80">
-              Email Address <span className="text-error">*</span>
-            </label>
-            <input
-              type="email"
-              required
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="input input-bordered w-full text-sm"
-              autoComplete="email"
-            />
-          </div>
+              <div>
+                <label className="label py-1 text-xs font-semibold text-base-content/80">
+                  Your Name <span className="text-error">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    autoFocus
+                    placeholder="e.g. Rahul Sharma"
+                    value={guestName}
+                    onChange={(e) => setGuestName(e.target.value)}
+                    className="input input-bordered w-full pl-9 text-sm"
+                  />
+                  <UserIcon className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40" />
+                </div>
+              </div>
 
-          <div>
-            <label className="label py-1 text-xs font-semibold text-base-content/80">
-              Password <span className="text-error">*</span>
-            </label>
-            <div className="relative">
-              <input
-                type={showPassword ? "text" : "password"}
-                required
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="input input-bordered w-full pr-10 text-sm"
-                autoComplete={authModalMode === "login" ? "current-password" : "new-password"}
-              />
               <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-base-content/50 hover:text-base-content"
-                aria-label={showPassword ? "Hide password" : "Show password"}
+                type="submit"
+                disabled={loading || !guestName.trim()}
+                className="btn btn-primary w-full mt-2 gap-2 shadow-md"
               >
-                {showPassword ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
+                {loading ? (
+                  <span className="loading loading-spinner loading-sm" />
+                ) : (
+                  <SparklesIcon className="size-4" />
+                )}
+                {loading ? "Joining as Guest…" : "Continue as Guest 🚀"}
               </button>
             </div>
-            {authModalMode === "signup" && (
-              <p className="mt-1 text-[11px] text-base-content/60">
-                Must be at least 6 characters.
-              </p>
-            )}
-          </div>
+          ) : (
+            <>
+              {authModalMode === "signup" && (
+                <div>
+                  <label className="label py-1 text-xs font-semibold text-base-content/80">
+                    Display Name
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. John Doe"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    className="input input-bordered w-full text-sm"
+                  />
+                </div>
+              )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="btn btn-primary w-full mt-2 gap-2 shadow-md"
-          >
-            {loading ? (
-              <span className="loading loading-spinner loading-sm" />
-            ) : (
-              <LogInIcon className="size-4" />
-            )}
-            {loading
-              ? authModalMode === "login"
-                ? "Signing in…"
-                : "Creating account…"
-              : authModalMode === "login"
-              ? "Sign In"
-              : "Create Account"}
-          </button>
+              <div>
+                <label className="label py-1 text-xs font-semibold text-base-content/80">
+                  Email Address <span className="text-error">*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="input input-bordered w-full text-sm"
+                  autoComplete="email"
+                />
+              </div>
+
+              <div>
+                <label className="label py-1 text-xs font-semibold text-base-content/80">
+                  Password <span className="text-error">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="input input-bordered w-full pr-10 text-sm"
+                    autoComplete={authModalMode === "login" ? "current-password" : "new-password"}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-base-content/50 hover:text-base-content"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
+                  </button>
+                </div>
+                {authModalMode === "signup" && (
+                  <p className="mt-1 text-[11px] text-base-content/60">
+                    Must be at least 6 characters.
+                  </p>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="btn btn-primary w-full mt-2 gap-2 shadow-md"
+              >
+                {loading ? (
+                  <span className="loading loading-spinner loading-sm" />
+                ) : (
+                  <LogInIcon className="size-4" />
+                )}
+                {loading
+                  ? authModalMode === "login"
+                    ? "Signing in…"
+                    : "Creating account…"
+                  : authModalMode === "login"
+                  ? "Sign In"
+                  : "Create Account"}
+              </button>
+            </>
+          )}
         </form>
 
         {/* Footer helper */}
@@ -511,8 +598,19 @@ function AuthModal() {
               >
                 Sign up
               </button>
+              {" · "}
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthModalMode("guest");
+                  setError(null);
+                }}
+                className="link link-secondary font-semibold"
+              >
+                Guest Mode
+              </button>
             </p>
-          ) : (
+          ) : authModalMode === "signup" ? (
             <p>
               Already have an account?{" "}
               <button
@@ -524,6 +622,42 @@ function AuthModal() {
                 className="link link-primary font-semibold"
               >
                 Sign in
+              </button>
+              {" · "}
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthModalMode("guest");
+                  setError(null);
+                }}
+                className="link link-secondary font-semibold"
+              >
+                Guest Mode
+              </button>
+            </p>
+          ) : (
+            <p>
+              Want to save your profile permanently?{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthModalMode("signup");
+                  setError(null);
+                }}
+                className="link link-primary font-semibold"
+              >
+                Create Account
+              </button>
+              {" · "}
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthModalMode("login");
+                  setError(null);
+                }}
+                className="link link-primary font-semibold"
+              >
+                Sign In
               </button>
             </p>
           )}

@@ -20,6 +20,10 @@ const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
+const guestSchema = z.object({
+  name: z.string().trim().min(2, "Name must be at least 2 characters").max(50, "Name must be at most 50 characters"),
+});
+
 // POST /api/auth/register
 router.post("/register", async (req, res, next) => {
   try {
@@ -110,6 +114,50 @@ router.post("/login", async (req, res, next) => {
       token,
       user: safeUser,
       message: "Login successful",
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// POST /api/auth/guest
+router.post("/guest", async (req, res, next) => {
+  try {
+    const parsed = guestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        error: "Validation failed",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const { name } = parsed.data;
+    const rand = Math.random().toString(36).substring(2, 8);
+    const guestEmail = `guest_${Date.now()}_${rand}@guest.local`;
+
+    const [newUser] = await db
+      .insert(users)
+      .values({
+        email: guestEmail,
+        passwordHash: "",
+        displayName: name,
+        role: "customer" as UserRole,
+      })
+      .returning();
+
+    const token = signJwtToken({
+      userId: newUser.id,
+      email: newUser.email,
+      role: newUser.role,
+      displayName: newUser.displayName,
+    });
+
+    const { passwordHash: _hash, ...safeUser } = newUser;
+    res.status(201).json({
+      token,
+      user: safeUser,
+      message: "Guest session started successfully",
     });
   } catch (e) {
     next(e);
